@@ -1,0 +1,97 @@
+(async function () {
+  // 指定したミリ秒だけ待機するための関数
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // 現在のURLからユーザー名を取得
+  const username = location.pathname.match(/\/users\/([^/]+)/)?.[1];
+
+  // ユーザーページ以外で実行された場合は処理を停止
+  if (!username) {
+    console.error("Filmarksのユーザーページで実行してください。");
+    return;
+  }
+
+  const baseUrl = `/users/${username}`;
+  const results = [];
+
+  // 1ページ分のHTMLを取得して、映画データを抽出する関数
+  const parsePage = async (page) => {
+    const res = await fetch(`${baseUrl}?page=${page}`, {
+      credentials: "same-origin",
+    });
+
+    // ページの取得に失敗した場合はエラーを表示
+    if (!res.ok) {
+      throw new Error(`ページの取得に失敗しました: page ${page}`);
+    }
+
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    // 映画カード要素を取得
+    const cards = [...doc.querySelectorAll("div.c-content-card")];
+
+    return cards.map((card) => {
+      const titleEl = card.querySelector("h3.c-content-card__title a");
+      const ratingEl = card.querySelector("div.c-rating__score");
+      const reviewEl = card.querySelector("p.c-content-card__review span");
+
+      return {
+        title: titleEl?.textContent.trim() || "",
+        rating: ratingEl?.textContent.trim() || "",
+        review: reviewEl?.textContent.trim() || "",
+        url: titleEl?.href || "",
+      };
+    });
+  };
+
+  try {
+    for (let page = 1; ; page++) {
+      console.log(`${page}ページ目を取得中...`);
+
+      const items = await parsePage(page);
+
+      // データが取得できなくなったら終了
+      if (items.length === 0) {
+        console.log("これ以上取得できるデータがありません。");
+        break;
+      }
+
+      results.push(...items);
+
+      // サーバーに負荷をかけないように1秒待機
+      await sleep(1000);
+    }
+
+    // CSV用に値をエスケープする関数
+    const escapeCsv = (value) =>
+      `"${String(value ?? "").replaceAll('"', '""').replace(/\r?\n/g, " ")}"`;
+
+    const header = ["Title", "Rating", "Review", "URL"];
+    const rows = results.map((item) => [
+      item.title,
+      item.rating,
+      item.review,
+      item.url,
+    ]);
+
+    const csv = [header, ...rows]
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\n");
+
+    // 文字化け防止のためBOMを追加
+    const blob = new Blob(["\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    // CSVファイルをダウンロード
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `filmarks_${username}.csv`;
+    a.click();
+
+    console.log(`完了しました。${results.length}件のデータをエクスポートしました。`);
+  } catch (error) {
+    console.error("エクスポート中にエラーが発生しました。", error);
+  }
+})();
