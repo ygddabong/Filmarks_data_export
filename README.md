@@ -46,7 +46,7 @@ Mac: Command + Option + J
 Windows: Ctrl + Shift + J
 ```
 
-4. スクリプトを貼り付けて実行する
+4. [スクリプト](https://github.com/ygddabong/Filmarks_data_export/blob/main/filmarks_data_export)を貼り付けて実行する
 
 ## スクリーンショット
 
